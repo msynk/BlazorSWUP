@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+    <Description>A simple library in order to show Blazor PWA Update Progress</Description>
+    <PackageLicenseExpression></PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/msynk/BlazorSWUP</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/msynk/BlazorSWUP</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <Authors>msynk</Authors>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+    <None Include="wwwroot\sw.js" />
+  </ItemGroup>
+
+</Project>

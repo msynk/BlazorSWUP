@@ -1,0 +1,98 @@
+﻿self.importScripts('./service-worker-assets.js');
+
+const VERSION = self.assetsManifest.version;
+const CACHE_NAME_PREFIX = 'blazor-swup-';
+const CACHE_NAME = `${CACHE_NAME_PREFIX}${self.assetsManifest.version}`;
+
+self.addEventListener('install', e => e.waitUntil(handleInstall(e)));
+self.addEventListener('activate', e => e.waitUntil(handleActivate(e)));
+self.addEventListener('fetch', e => e.respondWith(handleFetch(e)));
+self.addEventListener('message', handleMessage);
+
+async function handleInstall(e) {
+    log(`installing version (${VERSION})...`);
+    postMessage({ type: 'installing', data: { version: VERSION } });
+
+    await createNewCache();
+
+    log(`installed version (${VERSION})`);
+    postMessage({ type: 'installed', data: { version: VERSION } });
+}
+
+async function handleActivate(e) {
+    log(`activate version (${VERSION})`);
+
+    await deleteOldCaches();
+
+    postMessage({ type: 'activate', data: { version: VERSION } });
+}
+
+async function handleFetch(e) {
+    if (e.request.method !== 'GET') return fetch(e.request);
+
+    // For all navigation requests, try to serve index.html from cache
+    // If you need some URLs to be server-rendered, edit the following check to exclude those URLs
+    const shouldServeIndexHtml = e.request.mode === 'navigate';
+    const request = shouldServeIndexHtml ? 'index.html' : e.request;
+
+    const cache = await caches.open(CACHE_NAME);
+    const cachedResponse = await cache.match(request);
+
+    return cachedResponse || fetch(e.request);
+}
+
+function handleMessage(e) {
+    if (e.data == 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
+}
+
+// ============================================================================
+
+async function createNewCache() {
+    const offlineAssetsInclude = [/\.dll$/, /\.pdb$/, /\.wasm/, /\.html/, /\.js$/, /\.json$/, /\.css$/, /\.woff$/, /\.png$/, /\.jpe?g$/, /\.gif$/, /\.ico$/, /\.blat$/, /\.dat$/];
+    const offlineAssetsExclude = [/^_content\/BlazorSWUP\/sw.js$/, /^_content\/BlazorSWUP\/blazor.swup.js$/, /^service-worker\.js$/];
+
+    const assetsRequests = self.assetsManifest.assets
+        .filter(asset => offlineAssetsInclude.some(pattern => pattern.test(asset.url)))
+        .filter(asset => !offlineAssetsExclude.some(pattern => pattern.test(asset.url)))
+        .map(asset => new Request(asset.url, { integrity: asset.hash }));
+
+    let current = 0;
+    const total = assetsRequests.length;
+    const cache = await caches.open(CACHE_NAME);
+    return Promise.all(assetsRequests.map(addCache));
+
+    function addCache(assetRequest, index) {
+        return new Promise((resolve, reject) => {
+            setTimeout(async () => {
+                try {
+                    await cache.add(assetRequest);
+                    var percent = (++current) / total * 100;
+                    postMessage({ type: 'progress', data: { assetRequest, percent } });
+                    resolve();
+                } catch (err) {
+                    reject(err);
+                }
+            }, 1.000 * (index + 1));
+        });
+    }
+}
+
+async function deleteOldCaches() {
+    const cacheKeys = await caches.keys();
+    const promises = cacheKeys.filter(key => key.startsWith(CACHE_NAME_PREFIX) && key !== CACHE_NAME).map(key => caches.delete(key));
+    return Promise.all(promises);
+}
+
+function postMessage(message) {
+    self.clients
+        .matchAll({ includeUncontrolled: true, type: 'window', })
+        .then(function (clients) {
+            (clients || []).forEach(function (client) { client.postMessage(JSON.stringify(message)); });
+        });
+}
+
+function log(value) {
+    console.log('BlazorSWUP:sw:', value);
+}
