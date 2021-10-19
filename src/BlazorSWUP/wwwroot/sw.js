@@ -1,8 +1,9 @@
-﻿self.importScripts('./service-worker-assets.js');
+﻿
+self.importScripts('./service-worker-assets.js');
 
 const VERSION = self.assetsManifest.version;
 const CACHE_NAME_PREFIX = 'blazor-swup-';
-const CACHE_NAME = `${CACHE_NAME_PREFIX}${self.assetsManifest.version}`;
+const CACHE_NAME = `${CACHE_NAME_PREFIX}${VERSION}`;
 
 self.addEventListener('install', e => e.waitUntil(handleInstall(e)));
 self.addEventListener('activate', e => e.waitUntil(handleActivate(e)));
@@ -33,10 +34,12 @@ async function handleFetch(e) {
     // For all navigation requests, try to serve index.html from cache
     // If you need some URLs to be server-rendered, edit the following check to exclude those URLs
     const shouldServeIndexHtml = e.request.mode === 'navigate';
-    const request = shouldServeIndexHtml ? 'index.html' : e.request;
+    const requestUrl = shouldServeIndexHtml ? 'index.html' : e.request.url;
+    const asset = self.assetsManifest.assets.find(a => shouldServeIndexHtml? a.url === requestUrl: new URL(requestUrl).pathname.endsWith(a.url));
+    const cacheUrl = asset && `${asset.url}.${asset.hash}`;
 
     const cache = await caches.open(CACHE_NAME);
-    const cachedResponse = await cache.match(request);
+    const cachedResponse = await cache.match(cacheUrl || requestUrl);
 
     return cachedResponse || fetch(e.request);
 }
@@ -51,25 +54,44 @@ function handleMessage(e) {
 
 async function createNewCache() {
     const offlineAssetsInclude = [/\.dll$/, /\.pdb$/, /\.wasm/, /\.html/, /\.js$/, /\.json$/, /\.css$/, /\.woff$/, /\.png$/, /\.jpe?g$/, /\.gif$/, /\.ico$/, /\.blat$/, /\.dat$/];
-    const offlineAssetsExclude = [/^_content\/BlazorSWUP\/sw.js$/, /^_content\/BlazorSWUP\/blazor.swup.js$/, /^service-worker\.js$/];
+    const offlineAssetsExclude = [/^_content\/BlazorSWUP\/sw.js$/, /^service-worker\.js$/];
 
-    const assetsRequests = self.assetsManifest.assets
+    const assets = self.assetsManifest.assets
         .filter(asset => offlineAssetsInclude.some(pattern => pattern.test(asset.url)))
-        .filter(asset => !offlineAssetsExclude.some(pattern => pattern.test(asset.url)))
-        .map(asset => new Request(asset.url, { integrity: asset.hash }));
+        .filter(asset => !offlineAssetsExclude.some(pattern => pattern.test(asset.url)));
 
     let current = 0;
-    const total = assetsRequests.length;
-    const cache = await caches.open(CACHE_NAME);
-    return Promise.all(assetsRequests.map(addCache));
+    const total = assets.length;
 
-    function addCache(assetRequest, index) {
+    const cacheKeys = await caches.keys();
+    const oldCacheKey = cacheKeys.find(key => key.startsWith(CACHE_NAME_PREFIX));
+    let oldCache;
+    if (oldCacheKey) {
+        oldCache = await caches.open(oldCacheKey);
+    }
+
+    const cache = await caches.open(CACHE_NAME);
+    return Promise.all(assets.map(addCache));
+
+    async function addCache(asset, index) {
+        const request = new Request(asset.url, { integrity: asset.hash });
+        const cacheUrl = `${asset.url}.${asset.hash}`;
+        if (oldCache) {
+            const oldResponse = await oldCache.match(cacheUrl);
+            if (oldResponse) {
+                cache.put(cacheUrl, oldResponse);
+                current++;
+                return Promise.resolve();
+            }
+        }
         return new Promise((resolve, reject) => {
             setTimeout(async () => {
                 try {
-                    await cache.add(assetRequest);
+                    const response = await fetch(request);
+                    if (!response.ok) throw new TypeError('Bad response status');
+                    await cache.put(cacheUrl, response);
                     var percent = (++current) / total * 100;
-                    postMessage({ type: 'progress', data: { assetRequest, percent } });
+                    postMessage({ type: 'progress', data: { asset, percent, index: current } });
                     resolve();
                 } catch (err) {
                     reject(err);

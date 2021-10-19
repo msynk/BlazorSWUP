@@ -54,6 +54,14 @@
 
         #blazor-swup-reload {
             display: none;
+            margin-bottom: 8px;
+        }
+
+        #blazor-swup-assets {
+            font-size: 10px;
+            overflow: auto;
+            height: 666px;
+            text-align: left;
         }
     </style>
 </head>
@@ -68,6 +76,7 @@
             </div>
             <p id="blazor-swup-percent">0 %</p>
             <button id="blazor-swup-reload">Reload</button>
+            <ul id="blazor-swup-assets"></ul>
         </div>
     </div>
 
@@ -84,6 +93,7 @@
         var progressBar = document.getElementById('blazor-swup-progress-bar');
         var percentLabel = document.getElementById('blazor-swup-percent');
         var reloadButton = document.getElementById('blazor-swup-reload');
+        var assetsUl = document.getElementById('blazor-swup-assets');
         function blazorSwup(type, data) {
             switch (type) {
                 case 'update_found':
@@ -99,6 +109,9 @@
                     reloadButton.onclick = data.reload;
                     return console.log('new version installed:', data.version);
                 case 'progress':
+                    const li = document.createElement('li');
+                    li.innerHTML = `${data.index}: <b>${data.asset.url}</b>: ${data.asset.hash}`
+                    assetsUl.prepend(li);
                     const percent = Math.round(data.percent);
                     progressBar.style.width = `${percent}%`;
                     percentLabel.innerHTML = `${percent} %`;

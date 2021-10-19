@@ -46,9 +46,9 @@
 
         if (reg.waiting) {
             if (reg.installing) {
-                handle('installing');
+                handle('installing', {});
             } else {
-                handle('installed');
+                handle('installed', { reload: () => window.reloadPage() });
             }
         }
 
